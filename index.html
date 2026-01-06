@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCU Smart Buddy Portal</title>
+  
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- 1. 載入核心函式庫 (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React 18 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- 2. 自定義樣式 -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+    
+    body { 
+      font-family: 'Noto Sans TC', sans-serif; 
+      /* 高彩度漸層背景 */
+      background: radial-gradient(circle at 50% 0%, #f5d0fe 0%, #ffffff 50%, #fed7aa 100%);
+      min-height: 100vh;
+      color: #1e293b;
+      margin: 0;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    
+    .animate-in { animation: slideUpFade 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+    @keyframes slideUpFade {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 成功打勾動畫 */
+    .checkmark-circle {
+      stroke-dasharray: 166;
+      stroke-dashoffset: 166;
+      stroke-width: 2;
+      stroke-miterlimit: 10;
+      stroke: #22c55e;
+      fill: none;
+      animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+    }
+    .checkmark {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: block;
+      stroke-width: 2;
+      stroke: #fff;
+      stroke-miterlimit: 10;
+      margin: 10% auto;
+      box-shadow: inset 0px 0px 0px #22c55e;
+      animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
+    }
+    .checkmark-check {
+      transform-origin: 50% 50%;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+      animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+    }
+    @keyframes stroke { 100% { stroke-dashoffset: 0; } }
+    @keyframes scale { 0%, 100% { transform: none; } 50% { transform: scale3d(1.1, 1.1, 1); } }
+    @keyframes fill { 100% { box-shadow: inset 0px 0px 0px 30px #22c55e; } }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.02),
+        0 20px 25px -5px rgba(124, 58, 237, 0.05),
+        0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    }
+
+    .input-focus-ring:focus-within {
+      box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.15);
+      border-color: #d8b4fe;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- 3. React 應用程式邏輯 -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- 圖標組件 ---
+    const Icon = ({ name, size = 20, className = "" }) => {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (window.lucide && ref.current) {
+          ref.current.innerHTML = '';
+          const i = document.createElement('i');
+          const lucideName = name.replace(/([A-Z])/g, "-$1").toLowerCase().replace(/^-/, "");
+          i.setAttribute('data-lucide', lucideName);
+          ref.current.appendChild(i);
+          window.lucide.createIcons({
+            elements: [i],
+            attrs: { width: size, height: size, 'stroke-width': 2, class: className }
+          });
+        }
+      }, [name, size, className]);
+      return <span ref={ref} className="inline-flex items-center justify-center pointer-events-none"></span>;
+    };
+
+    // --- 獨立視圖組件 ---
+
+    const LoginView = ({ authData, handleAuthChange, handleLogin, setView, loading, startRegistration }) => {
+      const handleChange = (e) => {
+        const { name, value } = e.target;
+        handleAuthChange(name, value);
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 animate-in">
+          <div className="w-full max-w-md glass-panel rounded-[40px] p-10 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-purple-500"></div>
+            <div className="text-center mb-10">
+              <div className="flex justify-center mb-4 text-purple-600"><Icon name="Sparkles" size={40} /></div>
+              <h1 className="text-3xl font-black italic text-slate-800 mb-1 tracking-tight">CCU Smart Buddy</h1>
+              <p className="text-[10px] font-bold text-slate-400 tracking-[0.3em] uppercase">Connect • Support • Grow</p>
+            </div>
+            <div className="space-y-5">
+              <div className="relative group input-focus-ring rounded-2xl transition-all duration-300">
+                <div className="absolute left-5 top-4 text-slate-400"><Icon name="Mail" size={18} /></div>
+                <input className="w-full pl-14 pr-6 py-4 rounded-2xl bg-white border border-slate-100 outline-none text-sm font-medium text-slate-700" 
+                  name="email" placeholder="Email / 信箱" value={authData.email} onChange={handleChange} />
+              </div>
+              <div className="relative group input-focus-ring rounded-2xl transition-all duration-300">
+                <div className="absolute left-5 top-4 text-slate-400"><Icon name="Key" size={18} /></div>
+                <input type="password" className="w-full pl-14 pr-6 py-4 rounded-2xl bg-white border border-slate-100 outline-none text-sm font-medium text-slate-700" 
+                  name="password" placeholder="Password / 密碼" value={authData.password} onChange={handleChange} />
+              </div>
+              <button onClick={handleLogin} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-all flex items-center justify-center uppercase tracking-widest text-xs">
+                {loading ? <Icon name="Loader2" className="animate-spin" /> : "Sign In / 登入入口"}
+              </button>
+              <div className="flex justify-between px-2 text-[10px] font-bold uppercase tracking-wide pt-2">
+                <button onClick={() => setView('forgot')} className="text-slate-400 hover:text-slate-600 transition-colors">Forgot Password?</button>
+                <button onClick={startRegistration} className="text-purple-600 hover:text-purple-800 transition-colors">Create Account / 註冊</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const RegisterView = ({ regData, handleRegChange, regStep, setRegStep, handleRegister, setView, loading, INTEREST_OPTIONS, TABOO_OPTIONS, toggleList }) => {
+      
+      const handleChange = (e) => {
+        const { name, value } = e.target;
+        handleRegChange(name, value);
+      };
+
+      const handleRoleSelect = (role) => {
+        handleRegChange('role', role);
+        setRegStep(2);
+      };
+
+      const validateStep2 = () => {
+        const missing = [];
+        if (!regData.name.trim()) missing.push("- Name / 姓名");
+        if (!regData.nationality.trim()) missing.push("- Nationality / 國籍");
+        if (!regData.gender.trim()) missing.push("- Gender / 性別");
+        if (!regData.department.trim()) missing.push("- Dept. / 科系");
+        if (!regData.languageLevel.trim()) missing.push("- Language Level / 語言能力");
+        if (!regData.email.trim()) missing.push("- Email / 學校信箱");
+        if (!regData.password.trim()) missing.push("- Password / 密碼");
+
+        if (missing.length > 0) {
+          alert(`Please fill in the required fields / 請填寫以下必填欄位:\n\n${missing.join('\n')}`);
+          return;
+        }
+        setRegStep(3);
+      };
+
+      const goBack = () => {
+        if (regStep > 1) setRegStep(regStep - 1);
+        else setView('login');
+      };
+
+      return (
+        <div className="min-h-screen p-6 animate-in flex items-center justify-center">
+          <div className="w-full max-w-md glass-panel rounded-[40px] p-8 relative">
+            <button onClick={goBack} className="text-[10px] font-black text-slate-400 mb-6 uppercase flex items-center hover:text-slate-600 transition-colors pt-2 pl-1">
+              <Icon name="ChevronLeft" size={14} className="mr-1" /> {regStep === 1 ? "Back to Login" : "Previous Step"}
+            </button>
+            
+            {/* 進度條 */}
+            <div className="flex gap-2 mb-6">
+              {[1, 2, 3].map(s => (
+                <div key={s} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${regStep >= s ? 'bg-purple-500' : 'bg-slate-100'}`}></div>
+              ))}
+            </div>
+
+            {/* Step 1: 角色選擇 */}
+            {regStep === 1 && (
+              <div className="space-y-6 animate-in">
+                <div className="text-center mb-4">
+                  <h2 className="text-2xl font-black italic text-slate-800">Who are you?</h2>
+                  <p className="text-xs text-slate-400 font-bold">請選擇您的參與身分</p>
+                </div>
+                <div className="space-y-4">
+                  <button onClick={() => handleRoleSelect('Buddy')} className="w-full p-6 rounded-3xl border-2 border-slate-100 hover:border-purple-500 hover:bg-purple-50 transition-all flex items-center group text-left relative overflow-hidden active:scale-95">
+                    <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center mr-5 z-10 shadow-sm"><Icon name="GraduationCap" size={28} /></div>
+                    <div className="z-10">
+                      <h3 className="font-black text-lg text-slate-800">CCU Buddy</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">中正學伴 (本地生)</p>
+                    </div>
+                  </button>
+                  <button onClick={() => handleRoleSelect('International')} className="w-full p-6 rounded-3xl border-2 border-slate-100 hover:border-orange-500 hover:bg-orange-50 transition-all flex items-center group text-left relative overflow-hidden active:scale-95">
+                    <div className="w-14 h-14 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mr-5 z-10 shadow-sm"><Icon name="Globe" size={28} /></div>
+                    <div className="z-10">
+                      <h3 className="font-black text-lg text-slate-800">Int'l Student</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">國際學生 (International)</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: 基本資料 */}
+            {regStep === 2 && (
+              <div className="space-y-4 animate-in">
+                <h2 className="text-xl font-black text-slate-800 flex items-center"><Icon name="User" className="mr-2 text-purple-500"/> Basic Info / 基本資料</h2>
+                <input placeholder="Full Name / 姓名 *" name="name" className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm focus:border-purple-400 outline-none transition-colors" value={regData.name} onChange={handleChange} />
+                <div className="grid grid-cols-2 gap-3">
+                   <input placeholder="ID (If Any) / 學號 (若有)" name="studentId" className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm focus:border-purple-400 outline-none" value={regData.studentId} onChange={handleChange} />
+                   <input placeholder="Nationality / 國籍 *" name="nationality" className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm focus:border-purple-400 outline-none" value={regData.nationality} onChange={handleChange} />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                   <select className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-600 outline-none focus:border-purple-400" value={regData.gender} name="gender" onChange={handleChange}>
+                      <option value="">Gender / 性別 *</option><option value="Male">Male</option><option value="Female">Female</option>
+                   </select>
+                   <input placeholder="Dept. / 科系 *" name="department" className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm focus:border-purple-400 outline-none" value={regData.department} onChange={handleChange} />
+                </div>
+                
+                {/* 語言能力選單 */}
+                <select className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-600 outline-none focus:border-purple-400" name="languageLevel" value={regData.languageLevel} onChange={handleChange}>
+                   <option value="">{regData.role === 'Buddy' ? "English Proficiency / 英文 *" : "Mandarin Proficiency / 中文 *"}</option>
+                   <option value="Beginner">Beginner / 初級</option>
+                   <option value="Intermediate">Intermediate / 中級</option>
+                   <option value="Advanced">Advanced / 高級</option>
+                   <option value="Native">Native / 母語</option>
+                </select>
+
+                <input placeholder="Email / 學校信箱 *" name="email" className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm focus:border-purple-400 outline-none" value={regData.email} onChange={handleChange} />
+                <input type="password" placeholder="Set Password / 設定密碼 *" name="password" className="w-full px-5 py-3.5 rounded-xl bg-white border border-slate-200 text-sm focus:border-purple-400 outline-none" value={regData.password} onChange={handleChange} />
+                
+                <button onClick={validateStep2} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg mt-4 flex items-center justify-center text-xs uppercase tracking-widest hover:bg-slate-800 transition-colors active:scale-95">
+                  Next Step / 下一步 <Icon name="ArrowRight" size={14} className="ml-2" />
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: 偏好 */}
+            {regStep === 3 && (
+              <div className="space-y-6 animate-in">
+                <h2 className="text-xl font-black text-slate-800 flex items-center"><Icon name="Heart" className="mr-2 text-rose-500"/> Preferences / 偏好</h2>
+                
+                {regData.role === 'Buddy' && (
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Matching Capacity / 願配對人數</label>
+                    <select name="capacity" className="w-full mt-2 p-3.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-700 outline-none focus:border-purple-400" value={regData.capacity} onChange={e => handleChange(e)}>
+                      <option value="1">1 Person (Standard / 標準)</option>
+                      <option value="2">2 People (Active / 積極)</option>
+                      <option value="3">3 People (Super Buddy / 超級學伴)</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Interests (Select 3+) / 興趣</label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {INTEREST_OPTIONS.map(tag => (
+                      <button key={tag} onClick={() => toggleList('interests', tag)} 
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${regData.interests.includes(tag) ? 'bg-purple-600 border-purple-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-purple-300'}`}>
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Taboos (Optional) / 禁忌與規範</label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {TABOO_OPTIONS.map(tag => (
+                      <button key={tag} onClick={() => toggleList('taboos', tag)} 
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${regData.taboos.includes(tag) ? 'bg-rose-500 border-rose-500 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-rose-300'}`}>
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-5 bg-slate-900 rounded-[24px] text-white shadow-xl relative overflow-hidden">
+                  <div className="absolute -right-6 -bottom-6 text-white/5"><Icon name="Shield" size={100} /></div>
+                  <h4 className="flex items-center text-[10px] font-black mb-2 uppercase tracking-[0.2em] text-orange-400 italic"><Icon name="ShieldCheck" size={14} className="mr-2" /> Boundary Agreement / 陪伴邊界協議</h4>
+                  
+                  {/* 邊界協議條列式說明 */}
+                  <div className="text-[10px] leading-relaxed opacity-90 font-medium mb-4 space-y-2 border-l-2 border-orange-500 pl-3">
+                    <p>
+                      Buddies are peer guides, not 24/7 customer service, translators, or personal administrative assistants.<br/>
+                      <span className="text-slate-400">學伴是生活引導與陪伴者，並非 24 小時客服、翻譯、或行政代辦。</span>
+                    </p>
+                    <p>
+                      Both parties should respect each other's time and boundaries; immediate responses are not guaranteed.<br/>
+                      <span className="text-slate-400">雙方應尊重彼此的時間與界線，不保證即時回覆。</span>
+                    </p>
+                    <p>
+                      All interactions must be based on respect and safety, without causing pressure or discomfort.<br/>
+                      <span className="text-slate-400">所有互動須以尊重與安全為原則，不造成對方壓力或不適。</span>
+                    </p>
+                  </div>
+
+                  <label className="flex items-center space-x-3 cursor-pointer group p-2 rounded-xl hover:bg-white/10 transition-colors" onClick={() => handleRegChange('agreed', !regData.agreed)}>
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${regData.agreed ? 'bg-orange-500 border-orange-500' : 'border-white/30'}`}>
+                      {regData.agreed && <Icon name="Check" size={12} className="text-white" />}
+                    </div>
+                    <span className="text-[10px] font-bold uppercase italic tracking-widest text-orange-50/80 group-hover:text-white transition-colors">I Agree / 我已同意</span>
+                  </label>
+                </div>
+
+                <button onClick={handleRegister} disabled={loading} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-purple-200/50 flex items-center justify-center uppercase tracking-widest text-xs transition-all active:scale-95">
+                  {loading ? <Icon name="Loader2" className="animate-spin" /> : "Complete Registration / 完成註冊"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const RegisterSuccessView = ({ setView }) => (
+      <div className="min-h-screen flex items-center justify-center p-6 animate-in">
+        <div className="w-full max-w-md bg-white/90 backdrop-blur-md rounded-[50px] p-10 text-center shadow-2xl border border-white">
+          <div className="checkmark-circle w-20 h-20 mx-auto mb-6">
+             <svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                <circle className="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+                <path className="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+             </svg>
+          </div>
+          
+          <h2 className="text-3xl font-black italic text-slate-800 mb-2 tracking-tighter">SUCCESS!</h2>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">Registration Submitted / 報名成功</p>
+          
+          <div className="bg-purple-50 p-6 rounded-3xl mb-8 border border-purple-100">
+            <p className="text-xs leading-relaxed text-purple-900 font-bold">
+              The Office of International Affairs (OIA) will review your application. <br/><br/>
+              You will be able to see your buddy's profile here <span className="text-orange-500">after the matching is complete</span>.<br/><br/>
+              國際處將進行審核。配對完成後，您登入系統即可看到夥伴的詳細資料。
+            </p>
+          </div>
+
+          <button onClick={() => setView('login')} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg uppercase tracking-widest text-xs hover:scale-105 transition-transform">
+            Back to Login / 返回登入
+          </button>
+        </div>
+      </div>
+    );
+
+    const ForgotView = ({ recoveryEmail, setRecoveryEmail, handleForgot, setView, loading }) => (
+      <div className="min-h-screen flex items-center justify-center p-6 animate-in">
+        <div className="w-full max-w-md glass-panel rounded-[40px] p-10 relative">
+          <button onClick={() => setView('login')} className="text-[10px] font-black text-slate-400 mb-6 uppercase flex items-center hover:text-slate-600 transition-colors pt-2 pl-1">
+            <Icon name="ChevronLeft" size={14} className="mr-1" /> Back
+          </button>
+          <h2 className="text-2xl font-black mb-2 italic text-slate-800">Recover Password</h2>
+          <p className="text-xs text-slate-400 font-bold mb-6 uppercase tracking-widest">密碼將寄至您的信箱</p>
+          <input type="email" placeholder="Email / 註冊信箱" className="w-full px-5 py-4 rounded-2xl bg-white border border-slate-200 outline-none mb-4 focus:border-purple-400 transition-all" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} />
+          <button onClick={handleForgot} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg uppercase tracking-widest text-xs flex items-center justify-center">
+            {loading ? <Icon name="Loader2" className="animate-spin" /> : "Send / 寄送"}
+          </button>
+        </div>
+      </div>
+    );
+
+    const ReportSuccessView = ({ setView, earnedPoints }) => (
+      <div className="min-h-screen flex items-center justify-center p-6 animate-in">
+        <div className="w-full max-w-md bg-white/90 backdrop-blur-md rounded-[50px] p-10 text-center shadow-2xl border border-white">
+          <div className="checkmark-circle w-24 h-24 mx-auto mb-6">
+             <svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                <circle className="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+                <path className="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+             </svg>
+          </div>
+          
+          <h2 className="text-3xl font-black italic text-slate-800 mb-1 tracking-tighter">GREAT JOB!</h2>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Report Submitted / 回報成功</p>
+          
+          <div className="bg-gradient-to-r from-orange-400 to-amber-400 p-6 rounded-3xl mb-8 shadow-lg text-white">
+            <div className="flex justify-center items-center mb-1">
+              <Icon name="Trophy" size={32} className="text-white mr-2" />
+              <span className="text-4xl font-black">+{earnedPoints}</span>
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-90">Points Earned / 獲得點數</p>
+          </div>
+          
+          <p className="text-xs text-purple-900 font-bold mb-8 italic">
+            "You are awesome! Keep it up!"<br/>
+            你太棒了！繼續保持！
+          </p>
+
+          <button onClick={() => setView('home')} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg uppercase tracking-widest text-xs hover:scale-105 transition-transform">
+            Back to Dashboard / 返回首頁
+          </button>
+        </div>
+      </div>
+    );
+
+    const ReportView = ({ user, setUser, setView, callGAS, loading, setLoading, setEarnedPoints }) => {
+      const [rData, setRData] = useState({
+        date: '', location: '', type: '', summary: '', images: [], userId: user.studentId || user.email, userName: user.name,
+        selectedStudents: [] 
+      });
+
+      // [修正] 按鈕文字完整顯示
+      const INTERACTION_TYPES = [
+        { id: 'Face to Face / 實體見面', label: 'Face to Face / 實體見面', icon: 'Users' },
+        { id: 'Online Call / 線上通話', label: 'Online Call / 線上通話', icon: 'Phone' },
+        { id: 'Text Msg / 文字訊息', label: 'Text Msg / 文字訊息', icon: 'MessageSquareText' },
+        { id: 'Group Event / 團體活動', label: 'Group Event / 團體活動', icon: 'PartyPopper' }
+      ];
+
+      const toggleStudent = (studentName) => {
+        setRData(prev => {
+          const current = prev.selectedStudents;
+          const updated = current.includes(studentName)
+            ? current.filter(s => s !== studentName)
+            : [...current, studentName];
+          return { ...prev, selectedStudents: updated };
+        });
+      };
+
+      const handleImageUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length + rData.images.length > 2) return alert("Max 2 photos / 最多2張");
+        
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setRData(prev => ({ ...prev, images: [...prev.images, reader.result] }));
+          };
+          reader.readAsDataURL(file);
+        });
+      };
+
+      // [修正] 計算混合字數 Helper (中文=1, 英文單字=1)
+      const getWordCount = (text) => {
+         if (!text) return 0;
+         const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+         const otherWords = (text.replace(/[\u4e00-\u9fa5]/g, " ").match(/\S+/g) || []).length;
+         return chineseChars + otherWords;
+      };
+
+      const submitReport = () => {
+        if(!rData.date || !rData.type || !rData.summary) return alert("Please fill all fields / 請填寫完整");
+        
+        const hasMultipleBuddies = user.buddies && user.buddies.length > 1;
+        if (hasMultipleBuddies && rData.selectedStudents.length === 0) {
+           return alert("Please select who you met / 請選擇互動對象");
+        }
+
+        // --- 點數計算邏輯 3.0 ---
+        const basePoints = 12; 
+        
+        // 1. 人頭加成
+        const involvedCount = hasMultipleBuddies ? rData.selectedStudents.length : 1;
+        const crowdBonus = (involvedCount > 1) ? (involvedCount - 1) * 5 : 0;
+        
+        // 2. 視覺加成
+        const photoCount = rData.images.length;
+        const visualBonus = photoCount * 3; 
+        
+        // 3. 深度加成 (門檻 150)
+        const wordCount = getWordCount(rData.summary);
+        const depthBonus = wordCount >= 150 ? 5 : 0;
+        
+        const totalPoints = basePoints + crowdBonus + visualBonus + depthBonus;
+        
+        let studentsList = "Single Match";
+        if (hasMultipleBuddies) {
+            studentsList = rData.selectedStudents.join(", ");
+        } else if (user.buddies && user.buddies.length > 0) {
+            studentsList = user.buddies[0].name;
+        }
+
+        const payload = { 
+          ...rData, 
+          points: totalPoints, 
+          students: studentsList
+        };
+
+        setLoading(true);
+        callGAS('submitWeeklyReport', [payload], (res) => {
+          setLoading(false);
+          if (res.success) {
+            setUser(prev => ({ ...prev, points: (prev.points || 0) + totalPoints }));
+            setEarnedPoints(totalPoints);
+            setView('reportSuccess'); 
+          } else {
+            alert("Submission failed / 失敗: " + res.message);
+          }
+        });
+      };
+
+      // 計算當前混合字數
+      const currentWordCount = getWordCount(rData.summary);
+
+      return (
+        <div className="min-h-screen p-6 animate-in flex items-center justify-center">
+          <div className="w-full max-w-md glass-panel rounded-[40px] p-8 relative">
+            <button onClick={() => setView('home')} className="text-[10px] font-black text-slate-400 mb-6 uppercase flex items-center hover:text-slate-600 transition-colors pt-2 pl-1">
+              <Icon name="ChevronLeft" size={14} className="mr-1" /> Back to Dashboard
+            </button>
+            <h2 className="text-2xl font-black italic text-slate-800 mb-6 flex items-center">
+              <Icon name="ClipboardCheck" className="mr-2 text-orange-500" /> Weekly Check-in
+            </h2>
+
+            <div className="space-y-5">
+              {user.buddies && user.buddies.length > 1 && (
+                <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100">
+                  <label className="text-[10px] font-black text-purple-600 uppercase mb-2 block">Who did you meet? / 互動對象 (可複選)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {user.buddies.map((b, i) => (
+                      <button key={i} onClick={() => toggleStudent(b.name)} className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${rData.selectedStudents.includes(b.name) ? 'bg-purple-600 text-white border-purple-600 shadow-md' : 'bg-white text-slate-500 border-slate-200'}`}>
+                        {b.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Date / 日期</label>
+                  <input type="date" className="w-full p-3 rounded-2xl bg-white border border-slate-100 outline-none text-sm focus:border-purple-400 transition-colors" onChange={e => setRData({...rData, date: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Location / 地點</label>
+                  <input type="text" placeholder="e.g. Library" className="w-full p-3 rounded-2xl bg-white border border-slate-100 outline-none text-sm focus:border-purple-400 transition-colors" onChange={e => setRData({...rData, location: e.target.value})} />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Interaction Type / 互動方式</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {INTERACTION_TYPES.map(t => (
+                    <button key={t.id} onClick={() => setRData({...rData, type: t.id})} className={`py-3 px-2 rounded-xl text-[10px] font-bold transition-all border-2 flex items-center justify-center gap-1 ${rData.type === t.id ? 'bg-purple-600 border-purple-600 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400 hover:border-purple-200'}`}>
+                      <Icon name={t.icon} size={14} className="mr-1.5" />
+                      {t.label} 
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Activity Summary / 活動簡述</label>
+                <textarea rows="3" className="w-full p-4 rounded-2xl bg-white border border-slate-100 outline-none text-sm mt-1 focus:border-purple-400 transition-colors" placeholder="What did you do and what did you learn? / 做了什麼？有什麼收穫？" onChange={e => setRData({...rData, summary: e.target.value})}></textarea>
+                <p className="text-[9px] text-right text-slate-400 mt-1">{currentWordCount} words (150+ for bonus)</p>
+              </div>
+
+              <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                <label className="flex items-center text-[10px] font-black text-orange-600 uppercase mb-2"><Icon name="Image" size={14} className="mr-1" /> Photos (Max 2)</label>
+                <div className="flex gap-2">
+                  {rData.images.map((img, i) => (
+                    <div key={i} className="w-16 h-16 rounded-xl overflow-hidden border border-white shadow-sm"><img src={img} className="w-full h-full object-cover" /></div>
+                  ))}
+                  {rData.images.length < 2 && (
+                    <label className="w-16 h-16 rounded-xl bg-white border-2 border-dashed border-orange-200 flex items-center justify-center cursor-pointer hover:bg-orange-100 transition-colors">
+                      <Icon name="Plus" size={20} className="text-orange-400" />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <button onClick={submitReport} disabled={loading} className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg mt-2 flex items-center justify-center uppercase tracking-widest text-xs active:scale-95 transition-all">
+                {loading ? <Icon name="Loader2" className="animate-spin" /> : "Submit Report / 提交"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const ToolkitView = ({ setView }) => {
+      // [修正] Toolkit 內容優化
+      const [showModal, setShowModal] = useState(false);
+      const [modalContent, setModalContent] = useState(null);
+
+      // 定義 Modal 內容
+      const MODAL_DATA = {
+        "ARC": {
+          title: "ARC Application SOP / 居留證申請流程",
+          icon: <Icon name="FileText" size={40} className="text-blue-500 mb-4"/>,
+          content: (
+            <div className="space-y-4 text-left">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <h4 className="font-black text-blue-800 mb-2">Step 1: Timeline Requirements</h4>
+                 <ul className="list-disc pl-4 space-y-1 text-sm text-slate-600">
+                   <li>Apply within <strong>30 days</strong> of arrival</li>
+                   <li>Late Penalty: NT$2,000-10,000 fine</li>
+                </ul>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <h4 className="font-black text-blue-800 mb-2">Step 2: Prerequisites</h4>
+                <ul className="list-disc pl-4 space-y-1 text-sm text-slate-600">
+                   <li>Dormitory check-in completed</li>
+                   <li>OIA registration done</li>
+                   <li>Student ID card received</li>
+                </ul>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <h4 className="font-black text-blue-800 mb-2">Step 3: Required Documents</h4>
+                <ul className="list-disc pl-4 space-y-1 text-sm text-slate-600">
+                   <li>2-inch ID photos (JPG/PNG)</li>
+                   <li>Passport & Visa scans</li>
+                   <li>Enrollment Certificate (OIA)</li>
+                   <li>Residence Certificate (OIA)</li>
+                </ul>
+              </div>
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                <h4 className="font-black text-orange-800 mb-2">Step 4: Application Process</h4>
+                <ol className="list-decimal pl-4 space-y-2 text-sm text-slate-600">
+                   <li><strong>Prepare:</strong> Email documents to <u>ccuoiais@ccu.edu.tw</u></li>
+                   <li><strong>Apply Online:</strong> Use Immigration Office system (link below)</li>
+                   <li><strong>Payment:</strong> NT$1,000 fee (1 year validity)</li>
+                   <li><strong>Collection:</strong> Pick up at Chiayi City Service Station</li>
+                </ol>
+              </div>
+              <a href="https://coa.immigration.gov.tw/coa-frontend/student/entry?lang=en" target="_blank" className="block w-full bg-blue-600 text-white text-center py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors">Apply Online Now</a>
+            </div>
+          )
+        },
+        "Emergency": {
+          title: "Emergency Contacts / 緊急聯絡",
+          icon: <Icon name="Siren" size={40} className="text-rose-500 mb-4"/>,
+          content: (
+             <div className="space-y-3 text-left">
+                {/* 24hr Security */}
+                <div className="flex items-center justify-between p-3 bg-rose-50 rounded-xl border border-rose-100">
+                   <div>
+                     <span className="font-black text-rose-800 block">Campus Security (24hr)</span>
+                     <span className="text-xs text-rose-400">校安中心 (24小時)</span>
+                   </div>
+                   <div className="text-right">
+                      <a href="tel:+88652721114" className="text-rose-600 font-bold underline block">05-272-1114</a>
+                   </div>
+                </div>
+
+                {/* Main Gate */}
+                <div className="flex items-center justify-between p-3 bg-rose-50 rounded-xl border border-rose-100">
+                   <div>
+                     <span className="font-black text-rose-800 block">Main Gate Security</span>
+                     <span className="text-xs text-rose-400">大門警衛室 / 校內緊急</span>
+                   </div>
+                   <div className="text-right">
+                      <a href="tel:052721034" className="text-rose-600 font-bold underline block">05-272-1034</a>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="font-bold text-slate-700 block text-sm">Police / 報案</span>
+                      <a href="tel:110" className="text-blue-600 font-bold underline text-sm">110</a>
+                   </div>
+                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="font-bold text-slate-700 block text-sm">Ambulance / 救護</span>
+                      <a href="tel:119" className="text-blue-600 font-bold underline text-sm">119</a>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="font-bold text-slate-700 block text-sm">Minxiong Police</span>
+                      <span className="text-xs text-slate-400 block mb-1">民雄分局</span>
+                      <a href="tel:052262014" className="text-blue-600 font-bold underline text-sm">(05) 226-2014</a>
+                   </div>
+                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="font-bold text-slate-700 block text-sm">Fengshou Police</span>
+                      <span className="text-xs text-slate-400 block mb-1">豐收派出所</span>
+                      <a href="tel:052262732" className="text-blue-600 font-bold underline text-sm">(05) 226-2732</a>
+                   </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                   <h4 className="font-black text-slate-700 mb-2 text-sm">Nearby Major Hospitals</h4>
+                   <ul className="space-y-2 text-sm">
+                      <li>
+                         <a href="https://dalin.tzuchi-healthcare.org.tw/" target="_blank" className="flex items-center text-blue-600 hover:underline">
+                            <Icon name="ExternalLink" size={12} className="mr-1"/> Dalin Tzu Chi (大林慈濟)
+                         </a>
+                      </li>
+                      <li>
+                         <a href="https://www.cych.org.tw/" target="_blank" className="flex items-center text-blue-600 hover:underline">
+                            <Icon name="ExternalLink" size={12} className="mr-1"/> Chiayi Christian (嘉基)
+                         </a>
+                      </li>
+                   </ul>
+                </div>
+
+                <div className="p-4 bg-orange-50 rounded-xl border border-orange-100 text-sm text-slate-600">
+                   <h4 className="font-black text-orange-800 mb-2">OIA Emergency Support</h4>
+                   <p>Email: ccuoiais@ccu.edu.tw</p>
+                   <p>Phone: +886-5-272-0411 ext. 17616</p>
+                   <p className="mt-2 text-xs italic text-slate-400">*Prioritize safety first, then contact OIA.</p>
+                </div>
+             </div>
+          )
+        }
+      };
+
+      const handleOpenModal = (key) => {
+         setModalContent(MODAL_DATA[key]);
+         setShowModal(true);
+      };
+
+      return (
+        <div className="min-h-screen p-6 animate-in flex items-center justify-center">
+          <div className="w-full max-w-md glass-panel rounded-[40px] p-8 relative">
+            <button onClick={() => setView('home')} className="text-[10px] font-black text-slate-400 mb-6 uppercase flex items-center hover:text-slate-600 transition-colors pt-2 pl-1">
+              <Icon name="ChevronLeft" size={14} className="mr-1" /> Back to Dashboard
+            </button>
+            <h2 className="text-2xl font-black italic text-slate-800 mb-6 flex items-center">
+              <Icon name="BookOpen" className="mr-2 text-blue-500" /> Toolkit
+            </h2>
+
+            <div className="space-y-3 mb-8">
+              {/* ARC - Modal Trigger */}
+              <button onClick={() => handleOpenModal("ARC")} className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all group text-left">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">ARC Application SOP</h4>
+                    <p className="text-[10px] text-slate-400">居留證申請流程</p>
+                  </div>
+                  <Icon name="FileText" size={16} className="text-slate-300 group-hover:text-blue-500" />
+              </button>
+
+              {/* Chatbot - New Window */}
+              <a href="https://student.magicschool.ai/s/join?joinCode=Arhi4Q" target="_blank" className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-purple-200 hover:shadow-md transition-all group">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Chat with Globee</h4>
+                    <p className="text-[10px] text-slate-400">OIA AI Assistant</p>
+                  </div>
+                  <Icon name="Bot" size={16} className="text-slate-300 group-hover:text-purple-500" />
+              </a>
+
+              {/* Campus Map - New Window */}
+              <a href="https://pse.is/7y9crm" target="_blank" className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-green-200 hover:shadow-md transition-all group">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Campus Map</h4>
+                    <p className="text-[10px] text-slate-400">校園地圖</p>
+                  </div>
+                  <Icon name="Map" size={16} className="text-slate-300 group-hover:text-green-500" />
+              </a>
+
+              {/* Emergency - Modal Trigger */}
+              <button onClick={() => handleOpenModal("Emergency")} className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-rose-200 hover:shadow-md transition-all group text-left">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Emergency Contacts</h4>
+                    <p className="text-[10px] text-slate-400">緊急聯絡資訊</p>
+                  </div>
+                  <Icon name="Siren" size={16} className="text-slate-300 group-hover:text-rose-500" />
+              </button>
+            </div>
+
+            <div className="bg-slate-900 p-6 rounded-[32px] text-white">
+              <h4 className="text-xs font-black uppercase tracking-widest mb-3 flex items-center text-orange-400">
+                <Icon name="Info" size={14} className="mr-2" /> OIA Contact Info
+              </h4>
+              <div className="space-y-2 text-[10px] font-medium opacity-80">
+                <p>Email: ccuoiais@ccu.edu.tw</p>
+                <p>Phone: +886-5-272-0411 ext. 17616, 17618</p>
+                <p>Location: 2nd Floor, Co-operative Store (員生社)</p>
+                <p>Hours: Mon-Fri 08:30-12:00, 13:30-17:00</p>
+                <p>
+                  Website: <a href="https://oia.ccu.edu.tw/?Lang=en" target="_blank" className="text-orange-300 underline hover:text-orange-200">oia.ccu.edu.tw</a>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Overlay */}
+          {showModal && modalContent && (
+             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowModal(false)}>
+                <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl relative modal-enter" onClick={e => e.stopPropagation()}>
+                   <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors">
+                      <Icon name="X" size={16} className="text-slate-500"/>
+                   </button>
+                   <div className="text-center mb-4">
+                      {modalContent.icon}
+                      <h3 className="text-lg font-black text-slate-800">{modalContent.title.split(' / ')[0]}</h3>
+                      <p className="text-xs text-slate-400 font-bold">{modalContent.title.split(' / ')[1]}</p>
+                   </div>
+                   <div className="max-h-[60vh] overflow-y-auto pr-1">
+                      {modalContent.content}
+                   </div>
+                </div>
+             </div>
+          )}
+        </div>
+      );
+    };
+
+    const HomeView = ({ user, setView }) => {
+      // 確保 points 是數字，避免 NaN
+      const currentPoints = user.points || 0;
+      
+      // [修正] 進度條與下個等級計算
+      // 0-59 (Goal: 60) -> 60-179 (Goal: 180) -> 180-299 (Goal: 300) -> 300+ (Max)
+      let nextGoal = 60;
+      let prevGoal = 0;
+      let levelLabel = "CCU Explorer / 中正探索者";
+
+      if (currentPoints >= 300) {
+         nextGoal = 300; // Maxed out
+         prevGoal = 300;
+         levelLabel = "Global Ambassador / 全球親善大使";
+      } else if (currentPoints >= 180) {
+         nextGoal = 300;
+         prevGoal = 180;
+         levelLabel = "Swan Lake Guide / 天鵝湖引路人";
+      } else if (currentPoints >= 60) {
+         nextGoal = 180;
+         prevGoal = 60;
+         levelLabel = "Pineapple Guardian / 鳳梨守護者";
+      }
+
+      const pointsNeeded = Math.max(0, nextGoal - currentPoints);
+      const progressPercent = currentPoints >= 300 ? 100 : Math.min(100, Math.max(0, ((currentPoints - prevGoal) / (nextGoal - prevGoal)) * 100));
+
+      return (
+      <div className="min-h-screen bg-slate-50 pb-24 animate-in">
+        <header className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 sm:p-5 text-white shadow-lg rounded-b-[32px] sticky top-0 z-20">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-lg sm:text-xl font-black italic tracking-tighter">CCU Smart Buddy</h1>
+              <p className="text-[10px] opacity-80 font-bold uppercase tracking-widest">Welcome, {user.name}!</p>
+            </div>
+            {/* Show points regardless of role, but distinguish visual style slightly if needed */}
+            <div className="flex items-center gap-2">
+               <div className="bg-white/20 px-3 py-1.5 rounded-full border border-white/20 text-[10px] font-black flex items-center backdrop-blur-sm">
+                  <Icon name="Trophy" size={12} className="mr-2 text-yellow-300" /> {user.points} PTS
+               </div>
+               
+               {user.role === 'International' && (
+                  <div className="bg-white/20 px-3 py-1.5 rounded-full border border-white/20 text-[10px] font-bold backdrop-blur-sm">
+                     Int'l
+                  </div>
+               )}
+            </div>
+          </div>
+        </header>
+
+        <main className="p-4 sm:p-6 max-w-md mx-auto space-y-6">
+          {/* Achievement Section (更新為 60 分循環) */}
+          {user.role === 'Buddy' && (
+            <div className="bg-slate-900 p-6 sm:p-8 rounded-[40px] text-white shadow-2xl relative overflow-hidden group">
+               <div className="absolute -right-10 -bottom-10 text-white/5 w-40 h-40 rotate-12 group-hover:rotate-45 transition-transform duration-700"><Icon name="Trophy" size={160} /></div>
+               <div className="relative z-10 space-y-4">
+                  <div className="flex justify-between items-center">
+                     <h3 className="text-xs font-black uppercase tracking-[0.2em] text-orange-400 italic">Status</h3>
+                     <span className="text-[10px] font-bold opacity-50 uppercase">{levelLabel}</span>
+                  </div>
+                  <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                     {/* [修正] 使用精確計算的 progressPercent */}
+                     <div className="h-full bg-gradient-to-r from-orange-400 to-amber-300" style={{ width: `${progressPercent}%` }}></div>
+                  </div>
+                  <p className="text-[9px] font-bold opacity-60 uppercase tracking-widest">
+                     {currentPoints >= 300 ? "Max Level Reached!" : `Next Milestone: ${pointsNeeded} pts needed`}
+                  </p>
+               </div>
+            </div>
+          )}
+
+          {/* 夥伴卡片區 (多彩設計) */}
+          <div className="bg-white p-6 sm:p-8 rounded-[40px] shadow-sm border border-slate-100">
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center">
+              <Icon name="Users" size={14} className="mr-2" /> Your Match / 您的夥伴
+            </h3>
+            {user.isMatched ? (
+              <div className="space-y-4">
+                {user.buddies.map((b, i) => (
+                  <div key={i} className="flex flex-col p-5 bg-gradient-to-br from-slate-50 to-white rounded-[32px] border border-slate-100 hover:shadow-lg transition-all group card-hover relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-purple-100 to-transparent rounded-bl-full -mr-4 -mt-4 opacity-50"></div>
+                    
+                    <div className="flex items-center space-x-4 mb-4 relative z-10">
+                      <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg shrink-0">
+                        {b.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                           <h4 className="font-black text-slate-800 text-lg truncate">{b.name}</h4>
+                           <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-md text-[9px] font-bold uppercase">{b.nationality || "Taiwan"}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                           <p className="text-[10px] text-slate-500 font-bold uppercase truncate flex items-center"><Icon name="Book" size={10} className="mr-1"/>{b.major}</p>
+                           {b.gender && <span className="text-[10px] text-slate-400 font-bold flex items-center">• {b.gender}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 共同興趣與禁忌 */}
+                    <div className="mb-4 flex flex-wrap gap-1">
+                       {b.common && b.common.length > 0 ? (
+                          b.common.map((tag, idx) => (
+                             <span key={idx} className="px-2 py-1 bg-purple-50 text-purple-600 rounded-lg text-[9px] font-bold border border-purple-100">❤️ {tag}</span>
+                          ))
+                       ) : <span className="text-[9px] text-slate-300 italic">No common interests yet</span>}
+                    </div>
+                    
+                    {/* Taboos Warning */}
+                    {b.taboos && (
+                       <div className="mb-4 px-3 py-2 bg-rose-50 rounded-xl border border-rose-100 flex items-start">
+                          <Icon name="AlertTriangle" size={12} className="text-rose-500 mr-2 mt-0.5 shrink-0" />
+                          <p className="text-[9px] text-rose-600 font-bold leading-tight">Note: {b.taboos}</p>
+                       </div>
+                    )}
+
+                    <a href={`mailto:${b.email}`} className="w-full bg-slate-900 text-white hover:bg-violet-600 py-3 rounded-xl text-[10px] font-black flex items-center justify-center transition-colors uppercase tracking-widest shadow-md">
+                      <Icon name="Mail" size={14} className="mr-2" /> Email Contact
+                    </a>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-300">
+                <Icon name="Sparkles" size={32} className="mx-auto mb-2 opacity-50"/>
+                <p className="text-xs font-bold italic">Matching in progress...<br/>系統媒合中</p>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <button onClick={() => setView('report')} className="bg-white p-6 sm:p-8 rounded-[32px] text-center shadow-sm border border-slate-50 active:scale-95 transition-all hover:border-purple-200 group flex flex-col items-center">
+              <div className="text-purple-500 mb-2 group-hover:scale-110 transition-transform"><Icon name="ClipboardCheck" size={28} /></div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">Weekly Report</span>
+            </button>
+            <button onClick={() => setView('toolkit')} className="bg-white p-6 sm:p-8 rounded-[32px] text-center shadow-sm border border-slate-50 active:scale-95 transition-all hover:border-blue-200 group flex flex-col items-center">
+              <div className="text-blue-500 mb-2 group-hover:scale-110 transition-transform"><Icon name="BookOpen" size={28} /></div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">Toolkit</span>
+            </button>
+          </div>
+
+          <div className="text-center pt-6">
+            <button onClick={() => setView('login')} className="px-8 py-3 bg-white border border-slate-100 rounded-full text-[10px] font-black text-slate-300 uppercase tracking-widest hover:text-rose-500 hover:border-rose-100 transition-colors shadow-sm active:scale-95">Sign Out / 登出</button>
+          </div>
+        </main>
+      </div>
+    )};
+
+    // --- 主程式 App ---
+    const App = () => {
+      const [view, setView] = useState('login'); 
+      const [loading, setLoading] = useState(false);
+      const [user, setUser] = useState(null);
+      const [regStep, setRegStep] = useState(1);
+      const [earnedPoints, setEarnedPoints] = useState(0); 
+      
+      const [authData, setAuthData] = useState({ email: '', password: '' });
+      const [recoveryEmail, setRecoveryEmail] = useState('');
+      
+      const initialRegData = {
+        role: '', name: '', email: '', password: '', studentId: '', 
+        department: '', nationality: '', gender: '', languageLevel: '',
+        interests: [], taboos: [], capacity: '1', agreed: false
+      };
+      const [regData, setRegData] = useState(initialRegData);
+
+      const INTEREST_OPTIONS = ["Sports/運動", "Night Market/夜市", "Anime/動漫", "Hiking/健行", "Photography/攝影", "Music/音樂", "Movies/電影", "Travel/旅行", "Cooking/烹飪", "Language/語言交換", "Tech/科技", "Volunteer/志工"];
+      const TABOO_OPTIONS = ["No Pets/怕寵物", "No Smoking/拒菸", "Vegetarian/素食", "Halal/清真飲食"];
+
+      const handleRegChange = (field, value) => {
+        setRegData(prev => ({ ...prev, [field]: value }));
+      };
+
+      const handleAuthChange = (field, value) => {
+        setAuthData(prev => ({ ...prev, [field]: value }));
+      };
+
+// ==========================================
+      // VERCEL 連線設定 (請修改這裡！)
+      // ==========================================
+      // 請把剛剛 GAS 部署出來的網址貼在下面引號內
+      const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzCCmNbAGRXFj4OFZmUH2_xQPjnubHj8myEWGPTSXVPnCQQN9Gk4PIlw7ol9JuBFRA/exec"; 
+
+      const callGAS = (func, params, successCallback) => {
+        setLoading(true);
+
+        // 使用 fetch 發送請求到 GAS
+        fetch(GAS_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8", // 使用 text/plain 避免複雜的 CORS 預檢 (Preflight)
+          },
+          body: JSON.stringify({
+            action: func,  // 告訴後端要做什麼 (loginUser, etc.)
+            args: params   // 傳送參數陣列
+          }),
+        })
+        .then(response => response.json()) // 解析回傳的 JSON
+        .then(data => {
+          setLoading(false);
+          successCallback(data); // 執行原本的成功邏輯
+        })
+        .catch(err => {
+          setLoading(false);
+          console.error("API Error:", err);
+          alert("連線錯誤 / Connection Error: " + err.message);
+        });
+      };
+
+      const handleLogin = () => {
+        if (!authData.email || !authData.password) return alert("Please input credentials");
+        callGAS('loginUser', [authData.email, authData.password], (res) => {
+          if (res.success) { setUser(res); setView('home'); } else alert(res.message);
+        });
+      };
+
+      const handleForgot = () => {
+        if (!recoveryEmail) return alert("Please input email");
+        callGAS('forgotPassword', [recoveryEmail], res => { alert(res.message); setView('login'); });
+      };
+
+      const handleRegister = () => {
+        if (!regData.agreed) return alert("Please agree to the policy");
+        callGAS('processRegistration', [regData], (res) => {
+          if (res.status === "success") { 
+            setView('registerSuccess'); 
+          } else { 
+            alert(res.message); 
+          }
+        });
+      };
+
+      const toggleList = (listName, item) => {
+        setRegData(prev => {
+          const list = prev[listName];
+          return { ...prev, [listName]: list.includes(item) ? list.filter(i => i !== item) : [...list, item] };
+        });
+      };
+
+      const startRegistration = () => {
+        setRegData(initialRegData);
+        setRegStep(1);
+        setView('register');
+      };
+
+      return (
+        <div className="min-h-screen selection:bg-purple-100 selection:text-purple-900">
+          {view === 'login' && <LoginView authData={authData} setAuthData={setAuthData} handleAuthChange={handleAuthChange} handleLogin={handleLogin} setView={setView} loading={loading} startRegistration={startRegistration} />}
+          {view === 'register' && <RegisterView regData={regData} handleRegChange={handleRegChange} regStep={regStep} setRegStep={setRegStep} handleRegister={handleRegister} setView={setView} loading={loading} INTEREST_OPTIONS={INTEREST_OPTIONS} TABOO_OPTIONS={TABOO_OPTIONS} toggleList={toggleList} />}
+          {view === 'registerSuccess' && <RegisterSuccessView setView={setView} />}
+          {view === 'forgot' && <ForgotView recoveryEmail={recoveryEmail} setRecoveryEmail={setRecoveryEmail} handleForgot={handleForgot} setView={setView} loading={loading} />}
+          {view === 'home' && user && <HomeView user={user} setView={setView} />}
+          {view === 'report' && <ReportView user={user} setUser={setUser} setView={setView} callGAS={callGAS} loading={loading} setLoading={setLoading} setEarnedPoints={setEarnedPoints} />}
+          {view === 'reportSuccess' && <ReportSuccessView setView={setView} earnedPoints={earnedPoints} />}
+          {view === 'toolkit' && <ToolkitView setView={setView} />}
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
